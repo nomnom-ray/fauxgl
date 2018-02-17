@@ -4,7 +4,7 @@ import "math"
 
 func NewPlane() *Mesh {
 	v1 := Vector{-0.5, -0.5, 0}
-	v2 := Vector{0.5, -0.5, 0}
+	v2 := Vector{1, -0.5, 0}
 	v3 := Vector{0.5, 0.5, 0}
 	v4 := Vector{-0.5, 0.5, 0}
 	return NewTriangleMesh([]*Triangle{

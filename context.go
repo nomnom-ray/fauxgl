@@ -186,8 +186,10 @@ func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo
 				continue
 			}
 			wasInside = true
+
 			// check depth buffer for early abort
 			i := y*dc.Width + x
+
 			if i < 0 || i >= len(dc.DepthBuffer) {
 				// TODO: clipping roundoff error; fix
 				// TODO: could also be from fat lines going off screen
@@ -242,8 +244,8 @@ func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo
 		w00 += b12
 		w01 += b20
 		w02 += b01
-	}
 
+	}
 	return info
 }
 
@@ -335,6 +337,7 @@ func (dc *Context) DrawLine(t *Line) RasterizeInfo {
 }
 
 func (dc *Context) DrawTriangle(t *Triangle) RasterizeInfo {
+
 	// invoke vertex shader
 	v1 := dc.Shader.Vertex(t.V1)
 	v2 := dc.Shader.Vertex(t.V2)

@@ -9,6 +9,27 @@ type Vector struct {
 	X, Y, Z float64
 }
 
+//port from mgl64 start
+
+type Quat struct {
+	Wvec float64
+	Vec  Vector
+}
+
+func QuatRotate(angle float64, axis Vector) Quat {
+	c, s := float64(math.Cos(float64(angle/2))), float64(math.Sin(float64(angle/2)))
+
+	return Quat{c, axis.MulScalar(s)}
+}
+
+func (q1 Quat) Rotate(v Vector) Vector {
+	cross := q1.Vec.Cross(v)
+
+	return v.Add(cross.MulScalar(2 * q1.Wvec)).Add(q1.Vec.MulScalar(2).Cross(cross))
+}
+
+//port from mgl64 end
+
 func V(x, y, z float64) Vector {
 	return Vector{x, y, z}
 }

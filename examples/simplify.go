@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"image"
 
-	. "github.com/fogleman/fauxgl"
 	"github.com/nfnt/resize"
+	. "github.com/nomnom-ray/fauxgl"
 )
 
 const (

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kr/pretty"
+
 	. "github.com/fogleman/fauxgl"
 	"github.com/nfnt/resize"
 )
@@ -56,6 +58,7 @@ func main() {
 	start := time.Now()
 	context.Shader = shader
 	context.DrawMesh(mesh)
+	pretty.Println(mesh)
 	fmt.Println(time.Since(start))
 
 	// downsample image for antialiasing
