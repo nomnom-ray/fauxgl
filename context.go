@@ -5,6 +5,8 @@ import (
 	"math"
 	"runtime"
 	"sync"
+
+	"github.com/kr/pretty"
 )
 
 type Face int
@@ -54,6 +56,11 @@ type Context struct {
 	DepthBias    float64
 	screenMatrix Matrix
 	locks        []sync.Mutex
+	// //added for 3D picking
+	PickedX           int
+	PickedY           int
+	PrimitiveOnScreen []int
+	PickingFlag       bool
 }
 
 func NewContext(width, height int) *Context {
@@ -76,11 +83,36 @@ func NewContext(width, height int) *Context {
 	dc.screenMatrix = Screen(width, height)
 	dc.locks = make([]sync.Mutex, 256)
 	dc.ClearDepthBuffer()
+	dc.PickedX = 0
+	dc.PickedY = 0
+	dc.PrimitiveOnScreen = make([]int, 0)
+	dc.PickingFlag = false
 	return dc
+}
+
+func (dc *Context) SetPickedXY(pickedX, pickedY int) {
+	dc.PickedX = pickedX
+	dc.PickedY = pickedY
+}
+
+func (dc *Context) SetPickingFlag(flag bool) {
+	dc.PickingFlag = flag
+}
+
+func (dc *Context) ReturnedPick(primitive int) {
+	dc.PrimitiveOnScreen[0] = primitive
+}
+
+func (dc *Context) SetPrimitiveOnScreen(value []int) {
+	dc.PrimitiveOnScreen = value
 }
 
 func (dc *Context) Image() image.Image {
 	return dc.ColorBuffer
+}
+
+func (dc *Context) PrimitiveSelectable() []int {
+	return dc.PrimitiveOnScreen
 }
 
 func (dc *Context) ClearColorBufferWith(color Color) {
@@ -115,9 +147,9 @@ func edge(a, b, c Vector) float64 {
 	return (b.X-c.X)*(a.Y-c.Y) - (b.Y-c.Y)*(a.X-c.X)
 }
 
-func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo {
-	var info RasterizeInfo
+func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector, onScreenIndex int) RasterizeInfo {
 
+	var info RasterizeInfo
 	// integer bounding box
 	min := s0.Min(s1.Min(s2)).Floor()
 	max := s0.Max(s1.Max(s2)).Ceil()
@@ -125,7 +157,6 @@ func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo
 	x1 := int(max.X)
 	y0 := int(min.Y)
 	y1 := int(max.Y)
-
 	// forward differencing variables
 	p := Vector{float64(x0) + 0.5, float64(y0) + 0.5, 0}
 	w00 := edge(s1, s2, p)
@@ -137,7 +168,6 @@ func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo
 	b12 := s1.X - s2.X
 	a20 := s0.Y - s2.Y
 	b20 := s2.X - s0.X
-
 	// reciprocals
 	ra := 1 / edge(s0, s1, s2)
 	r0 := 1 / v0.Output.W
@@ -146,7 +176,6 @@ func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo
 	ra12 := 1 / a12
 	ra20 := 1 / a20
 	ra01 := 1 / a01
-
 	// iterate over all pixels in bounding box
 	for y := y0; y <= y1; y++ {
 		var d float64
@@ -220,24 +249,33 @@ func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo
 					// update depth buffer
 					dc.DepthBuffer[i] = z
 				}
-				if dc.WriteColor {
-					// update color buffer
-					if dc.AlphaBlend && color.A < 1 {
-						sr, sg, sb, sa := color.NRGBA().RGBA()
-						a := (0xffff - sa) * 0x101
-						j := dc.ColorBuffer.PixOffset(x, y)
-						dr := &dc.ColorBuffer.Pix[j+0]
-						dg := &dc.ColorBuffer.Pix[j+1]
-						db := &dc.ColorBuffer.Pix[j+2]
-						da := &dc.ColorBuffer.Pix[j+3]
-						*dr = uint8((uint32(*dr)*a/0xffff + sr) >> 8)
-						*dg = uint8((uint32(*dg)*a/0xffff + sg) >> 8)
-						*db = uint8((uint32(*db)*a/0xffff + sb) >> 8)
-						*da = uint8((uint32(*da)*a/0xffff + sa) >> 8)
-					} else {
-						dc.ColorBuffer.SetNRGBA(x, y, color.NRGBA())
+				if !dc.PickingFlag {
+					if dc.WriteColor {
+						// update color buffer
+						if dc.AlphaBlend && color.A < 1 {
+							sr, sg, sb, sa := color.NRGBA().RGBA()
+							a := (0xffff - sa) * 0x101
+							j := dc.ColorBuffer.PixOffset(x, y)
+							dr := &dc.ColorBuffer.Pix[j+0]
+							dg := &dc.ColorBuffer.Pix[j+1]
+							db := &dc.ColorBuffer.Pix[j+2]
+							da := &dc.ColorBuffer.Pix[j+3]
+							*dr = uint8((uint32(*dr)*a/0xffff + sr) >> 8)
+							*dg = uint8((uint32(*dg)*a/0xffff + sg) >> 8)
+							*db = uint8((uint32(*db)*a/0xffff + sb) >> 8)
+							*da = uint8((uint32(*da)*a/0xffff + sa) >> 8)
+						} else {
+							dc.ColorBuffer.SetNRGBA(x, y, color.NRGBA())
+						}
+					}
+				} else {
+					if x == dc.PickedX && y == dc.PickedY {
+						pretty.Println(onScreenIndex)
+						lock.Unlock()
+						return info
 					}
 				}
+
 			}
 			lock.Unlock()
 		}
@@ -246,10 +284,15 @@ func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo
 		w02 += b01
 
 	}
+
+	if !dc.PickingFlag {
+		dc.PrimitiveOnScreen = append(dc.PrimitiveOnScreen, onScreenIndex)
+	}
+
 	return info
 }
 
-func (dc *Context) line(v0, v1 Vertex, s0, s1 Vector) RasterizeInfo {
+func (dc *Context) line(v0, v1 Vertex, s0, s1 Vector, onScreenIndex int) RasterizeInfo {
 	n := s1.Sub(s0).Perpendicular().MulScalar(dc.LineWidth / 2)
 	s0 = s0.Add(s0.Sub(s1).Normalize().MulScalar(dc.LineWidth / 2))
 	s1 = s1.Add(s1.Sub(s0).Normalize().MulScalar(dc.LineWidth / 2))
@@ -257,19 +300,19 @@ func (dc *Context) line(v0, v1 Vertex, s0, s1 Vector) RasterizeInfo {
 	s01 := s0.Sub(n)
 	s10 := s1.Add(n)
 	s11 := s1.Sub(n)
-	info1 := dc.rasterize(v1, v0, v0, s11, s01, s00)
-	info2 := dc.rasterize(v1, v1, v0, s10, s11, s00)
+	info1 := dc.rasterize(v1, v0, v0, s11, s01, s00, onScreenIndex)
+	info2 := dc.rasterize(v1, v1, v0, s10, s11, s00, onScreenIndex)
 	return info1.Add(info2)
 }
 
-func (dc *Context) wireframe(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo {
-	info1 := dc.line(v0, v1, s0, s1)
-	info2 := dc.line(v1, v2, s1, s2)
-	info3 := dc.line(v2, v0, s2, s0)
+func (dc *Context) wireframe(v0, v1, v2 Vertex, s0, s1, s2 Vector, onScreenIndex int) RasterizeInfo {
+	info1 := dc.line(v0, v1, s0, s1, onScreenIndex)
+	info2 := dc.line(v1, v2, s1, s2, onScreenIndex)
+	info3 := dc.line(v2, v0, s2, s0, onScreenIndex)
 	return info1.Add(info2).Add(info3)
 }
 
-func (dc *Context) drawClippedLine(v0, v1 Vertex) RasterizeInfo {
+func (dc *Context) drawClippedLine(v0, v1 Vertex, onScreenIndex int) RasterizeInfo {
 	// normalized device coordinates
 	ndc0 := v0.Output.DivScalar(v0.Output.W).Vector()
 	ndc1 := v1.Output.DivScalar(v1.Output.W).Vector()
@@ -279,10 +322,10 @@ func (dc *Context) drawClippedLine(v0, v1 Vertex) RasterizeInfo {
 	s1 := dc.screenMatrix.MulPosition(ndc1)
 
 	// rasterize
-	return dc.line(v0, v1, s0, s1)
+	return dc.line(v0, v1, s0, s1, onScreenIndex)
 }
 
-func (dc *Context) drawClippedTriangle(v0, v1, v2 Vertex) RasterizeInfo {
+func (dc *Context) drawClippedTriangle(v0, v1, v2 Vertex, onScreenIndex int) RasterizeInfo {
 	// normalized device coordinates
 	ndc0 := v0.Output.DivScalar(v0.Output.W).Vector()
 	ndc1 := v1.Output.DivScalar(v1.Output.W).Vector()
@@ -309,15 +352,18 @@ func (dc *Context) drawClippedTriangle(v0, v1, v2 Vertex) RasterizeInfo {
 	s1 := dc.screenMatrix.MulPosition(ndc1)
 	s2 := dc.screenMatrix.MulPosition(ndc2)
 
+	pretty.Println(onScreenIndex)
+
 	// rasterize
 	if dc.Wireframe {
-		return dc.wireframe(v0, v1, v2, s0, s1, s2)
-	} else {
-		return dc.rasterize(v0, v1, v2, s0, s1, s2)
+		return dc.wireframe(v0, v1, v2, s0, s1, s2, onScreenIndex)
 	}
+
+	return dc.rasterize(v0, v1, v2, s0, s1, s2, onScreenIndex)
+
 }
 
-func (dc *Context) DrawLine(t *Line) RasterizeInfo {
+func (dc *Context) DrawLine(t *Line, onScreenIndex int) RasterizeInfo {
 	// invoke vertex shader
 	v1 := dc.Shader.Vertex(t.V1)
 	v2 := dc.Shader.Vertex(t.V2)
@@ -326,17 +372,17 @@ func (dc *Context) DrawLine(t *Line) RasterizeInfo {
 		// clip to viewing volume
 		line := ClipLine(NewLine(v1, v2))
 		if line != nil {
-			return dc.drawClippedLine(line.V1, line.V2)
+			return dc.drawClippedLine(line.V1, line.V2, onScreenIndex)
 		} else {
 			return RasterizeInfo{}
 		}
 	} else {
 		// no need to clip
-		return dc.drawClippedLine(v1, v2)
+		return dc.drawClippedLine(v1, v2, onScreenIndex)
 	}
 }
 
-func (dc *Context) DrawTriangle(t *Triangle) RasterizeInfo {
+func (dc *Context) DrawTriangle(t *Triangle, onScreenIndex int) RasterizeInfo {
 
 	// invoke vertex shader
 	v1 := dc.Shader.Vertex(t.V1)
@@ -348,13 +394,13 @@ func (dc *Context) DrawTriangle(t *Triangle) RasterizeInfo {
 		triangles := ClipTriangle(NewTriangle(v1, v2, v3))
 		var result RasterizeInfo
 		for _, t := range triangles {
-			info := dc.drawClippedTriangle(t.V1, t.V2, t.V3)
+			info := dc.drawClippedTriangle(t.V1, t.V2, t.V3, onScreenIndex)
 			result = result.Add(info)
 		}
 		return result
 	} else {
 		// no need to clip
-		return dc.drawClippedTriangle(v1, v2, v3)
+		return dc.drawClippedTriangle(v1, v2, v3, onScreenIndex)
 	}
 }
 
@@ -366,7 +412,7 @@ func (dc *Context) DrawLines(lines []*Line) RasterizeInfo {
 			var result RasterizeInfo
 			for i, l := range lines {
 				if i%wn == wi {
-					info := dc.DrawLine(l)
+					info := dc.DrawLine(l, i)
 					result = result.Add(info)
 				}
 			}
@@ -388,7 +434,7 @@ func (dc *Context) DrawTriangles(triangles []*Triangle) RasterizeInfo {
 			var result RasterizeInfo
 			for i, t := range triangles {
 				if i%wn == wi {
-					info := dc.DrawTriangle(t)
+					info := dc.DrawTriangle(t, i)
 					result = result.Add(info)
 				}
 			}
