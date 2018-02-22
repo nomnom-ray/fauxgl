@@ -1,20 +1,21 @@
 package fauxgl
 
 type Triangle struct {
-	V1, V2, V3 Vertex
+	V1, V2, V3  Vertex
+	PrimitiveID int
 }
 
-func NewTriangle(v1, v2, v3 Vertex) *Triangle {
-	t := Triangle{v1, v2, v3}
+func NewTriangle(v1, v2, v3 Vertex, id int) *Triangle {
+	t := Triangle{v1, v2, v3, id}
 	t.FixNormals()
 	return &t
 }
 
-func NewTriangleForPoints(p1, p2, p3 Vector) *Triangle {
+func NewTriangleForPoints(p1, p2, p3 Vector, id int) *Triangle {
 	v1 := Vertex{Position: p1}
 	v2 := Vertex{Position: p2}
 	v3 := Vertex{Position: p3}
-	return NewTriangle(v1, v2, v3)
+	return NewTriangle(v1, v2, v3, id)
 }
 
 func (t *Triangle) IsDegenerate() bool {

@@ -5,8 +5,6 @@ import (
 	"math"
 	"runtime"
 	"sync"
-
-	"github.com/kr/pretty"
 )
 
 type Face int
@@ -61,6 +59,8 @@ type Context struct {
 	PickedY           int
 	PrimitiveOnScreen []int
 	PickingFlag       bool
+	PickedTriangle    *Triangle
+	PickedPoint       *Vertex
 }
 
 func NewContext(width, height int) *Context {
@@ -87,6 +87,9 @@ func NewContext(width, height int) *Context {
 	dc.PickedY = 0
 	dc.PrimitiveOnScreen = make([]int, 0)
 	dc.PickingFlag = false
+	dc.PickedTriangle = NewTriangleForPoints(
+		Vector{0.0, 0.0, 0.0}, Vector{0.0, 0.0, 0.0}, Vector{0.0, 0.0, 0.0}, 0)
+	dc.PickedPoint = &Vertex{Position: Vector{0.0, 0.0, 0.0}}
 	return dc
 }
 
@@ -99,20 +102,26 @@ func (dc *Context) SetPickingFlag(flag bool) {
 	dc.PickingFlag = flag
 }
 
-func (dc *Context) ReturnedPick(primitive int) {
-	dc.PrimitiveOnScreen[0] = primitive
+func (dc *Context) ReturnedPick() (*Triangle, *Vertex) {
+
+	if dc.PickedTriangle.V1.Texture.X == 0.0 &&
+		dc.PickedTriangle.V2.Texture.Y == 0.0 &&
+		dc.PickedTriangle.V3.Texture.Z == 0.0 {
+		return nil, nil
+	}
+	return dc.PickedTriangle, dc.PickedPoint
 }
 
 func (dc *Context) SetPrimitiveOnScreen(value []int) {
 	dc.PrimitiveOnScreen = value
 }
 
-func (dc *Context) Image() image.Image {
-	return dc.ColorBuffer
-}
-
 func (dc *Context) PrimitiveSelectable() []int {
 	return dc.PrimitiveOnScreen
+}
+
+func (dc *Context) Image() image.Image {
+	return dc.ColorBuffer
 }
 
 func (dc *Context) ClearColorBufferWith(color Color) {
@@ -147,7 +156,9 @@ func edge(a, b, c Vector) float64 {
 	return (b.X-c.X)*(a.Y-c.Y) - (b.Y-c.Y)*(a.X-c.X)
 }
 
-func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector, onScreenIndex int) RasterizeInfo {
+func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector, id int, onScreenIndex int) RasterizeInfo {
+
+	// pretty.Println(id)
 
 	var info RasterizeInfo
 	// integer bounding box
@@ -270,29 +281,26 @@ func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector, onScreenIndex
 					}
 				} else {
 					if x == dc.PickedX && y == dc.PickedY {
-						pretty.Println(onScreenIndex)
+						dc.PickedTriangle = &Triangle{v0, v1, v2, id}
+						dc.PickedPoint = &v
 						lock.Unlock()
 						return info
 					}
 				}
-
 			}
 			lock.Unlock()
 		}
 		w00 += b12
 		w01 += b20
 		w02 += b01
-
 	}
-
 	if !dc.PickingFlag {
 		dc.PrimitiveOnScreen = append(dc.PrimitiveOnScreen, onScreenIndex)
 	}
-
 	return info
 }
 
-func (dc *Context) line(v0, v1 Vertex, s0, s1 Vector, onScreenIndex int) RasterizeInfo {
+func (dc *Context) line(v0, v1 Vertex, s0, s1 Vector, id int, onScreenIndex int) RasterizeInfo {
 	n := s1.Sub(s0).Perpendicular().MulScalar(dc.LineWidth / 2)
 	s0 = s0.Add(s0.Sub(s1).Normalize().MulScalar(dc.LineWidth / 2))
 	s1 = s1.Add(s1.Sub(s0).Normalize().MulScalar(dc.LineWidth / 2))
@@ -300,19 +308,19 @@ func (dc *Context) line(v0, v1 Vertex, s0, s1 Vector, onScreenIndex int) Rasteri
 	s01 := s0.Sub(n)
 	s10 := s1.Add(n)
 	s11 := s1.Sub(n)
-	info1 := dc.rasterize(v1, v0, v0, s11, s01, s00, onScreenIndex)
-	info2 := dc.rasterize(v1, v1, v0, s10, s11, s00, onScreenIndex)
+	info1 := dc.rasterize(v1, v0, v0, s11, s01, s00, id, onScreenIndex)
+	info2 := dc.rasterize(v1, v1, v0, s10, s11, s00, id, onScreenIndex)
 	return info1.Add(info2)
 }
 
-func (dc *Context) wireframe(v0, v1, v2 Vertex, s0, s1, s2 Vector, onScreenIndex int) RasterizeInfo {
-	info1 := dc.line(v0, v1, s0, s1, onScreenIndex)
-	info2 := dc.line(v1, v2, s1, s2, onScreenIndex)
-	info3 := dc.line(v2, v0, s2, s0, onScreenIndex)
+func (dc *Context) wireframe(v0, v1, v2 Vertex, s0, s1, s2 Vector, id int, onScreenIndex int) RasterizeInfo {
+	info1 := dc.line(v0, v1, s0, s1, id, onScreenIndex)
+	info2 := dc.line(v1, v2, s1, s2, id, onScreenIndex)
+	info3 := dc.line(v2, v0, s2, s0, id, onScreenIndex)
 	return info1.Add(info2).Add(info3)
 }
 
-func (dc *Context) drawClippedLine(v0, v1 Vertex, onScreenIndex int) RasterizeInfo {
+func (dc *Context) drawClippedLine(v0, v1 Vertex, id int, onScreenIndex int) RasterizeInfo {
 	// normalized device coordinates
 	ndc0 := v0.Output.DivScalar(v0.Output.W).Vector()
 	ndc1 := v1.Output.DivScalar(v1.Output.W).Vector()
@@ -322,10 +330,10 @@ func (dc *Context) drawClippedLine(v0, v1 Vertex, onScreenIndex int) RasterizeIn
 	s1 := dc.screenMatrix.MulPosition(ndc1)
 
 	// rasterize
-	return dc.line(v0, v1, s0, s1, onScreenIndex)
+	return dc.line(v0, v1, s0, s1, id, onScreenIndex)
 }
 
-func (dc *Context) drawClippedTriangle(v0, v1, v2 Vertex, onScreenIndex int) RasterizeInfo {
+func (dc *Context) drawClippedTriangle(v0, v1, v2 Vertex, id int, onScreenIndex int) RasterizeInfo {
 	// normalized device coordinates
 	ndc0 := v0.Output.DivScalar(v0.Output.W).Vector()
 	ndc1 := v1.Output.DivScalar(v1.Output.W).Vector()
@@ -352,14 +360,12 @@ func (dc *Context) drawClippedTriangle(v0, v1, v2 Vertex, onScreenIndex int) Ras
 	s1 := dc.screenMatrix.MulPosition(ndc1)
 	s2 := dc.screenMatrix.MulPosition(ndc2)
 
-	pretty.Println(onScreenIndex)
-
 	// rasterize
 	if dc.Wireframe {
-		return dc.wireframe(v0, v1, v2, s0, s1, s2, onScreenIndex)
+		return dc.wireframe(v0, v1, v2, s0, s1, s2, id, onScreenIndex)
 	}
 
-	return dc.rasterize(v0, v1, v2, s0, s1, s2, onScreenIndex)
+	return dc.rasterize(v0, v1, v2, s0, s1, s2, id, onScreenIndex)
 
 }
 
@@ -367,18 +373,19 @@ func (dc *Context) DrawLine(t *Line, onScreenIndex int) RasterizeInfo {
 	// invoke vertex shader
 	v1 := dc.Shader.Vertex(t.V1)
 	v2 := dc.Shader.Vertex(t.V2)
+	id := 0
 
 	if v1.Outside() || v2.Outside() {
 		// clip to viewing volume
 		line := ClipLine(NewLine(v1, v2))
 		if line != nil {
-			return dc.drawClippedLine(line.V1, line.V2, onScreenIndex)
+			return dc.drawClippedLine(line.V1, line.V2, id, onScreenIndex)
 		} else {
 			return RasterizeInfo{}
 		}
 	} else {
 		// no need to clip
-		return dc.drawClippedLine(v1, v2, onScreenIndex)
+		return dc.drawClippedLine(v1, v2, id, onScreenIndex)
 	}
 }
 
@@ -388,19 +395,20 @@ func (dc *Context) DrawTriangle(t *Triangle, onScreenIndex int) RasterizeInfo {
 	v1 := dc.Shader.Vertex(t.V1)
 	v2 := dc.Shader.Vertex(t.V2)
 	v3 := dc.Shader.Vertex(t.V3)
+	id := t.PrimitiveID
 
 	if v1.Outside() || v2.Outside() || v3.Outside() {
 		// clip to viewing volume
-		triangles := ClipTriangle(NewTriangle(v1, v2, v3))
+		triangles := ClipTriangle(NewTriangle(v1, v2, v3, id))
 		var result RasterizeInfo
 		for _, t := range triangles {
-			info := dc.drawClippedTriangle(t.V1, t.V2, t.V3, onScreenIndex)
+			info := dc.drawClippedTriangle(t.V1, t.V2, t.V3, t.PrimitiveID, onScreenIndex)
 			result = result.Add(info)
 		}
 		return result
 	} else {
 		// no need to clip
-		return dc.drawClippedTriangle(v1, v2, v3, onScreenIndex)
+		return dc.drawClippedTriangle(v1, v2, v3, id, onScreenIndex)
 	}
 }
 

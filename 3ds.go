@@ -159,7 +159,7 @@ func readFaceList(file *os.File, vertices []Vector) ([]*Triangle, error) {
 			return nil, err
 		}
 		result[i] = NewTriangleForPoints(
-			vertices[v[0]], vertices[v[1]], vertices[v[2]])
+			vertices[v[0]], vertices[v[1]], vertices[v[2]], i)
 	}
 	return result, nil
 }

@@ -58,6 +58,7 @@ func ClipTriangle(t *Triangle) []*Triangle {
 	p1 := w1.Vector()
 	p2 := w2.Vector()
 	p3 := w3.Vector()
+	id := t.PrimitiveID
 	points := []VectorW{w1, w2, w3}
 	newPoints := sutherlandHodgman(points, clipPlanes)
 	var result []*Triangle
@@ -68,7 +69,7 @@ func ClipTriangle(t *Triangle) []*Triangle {
 		v1 := InterpolateVertexes(t.V1, t.V2, t.V3, b1)
 		v2 := InterpolateVertexes(t.V1, t.V2, t.V3, b2)
 		v3 := InterpolateVertexes(t.V1, t.V2, t.V3, b3)
-		result = append(result, NewTriangle(v1, v2, v3))
+		result = append(result, NewTriangle(v1, v2, v3, id))
 	}
 	return result
 }

@@ -219,8 +219,8 @@ func triangulateVoxelFaces(plane voxelPlane, faces []voxelFace) []*Triangle {
 		if plane.Normal.Sign < 0 {
 			p1, p2, p3, p4 = p4, p3, p2, p1
 		}
-		t1 := NewTriangleForPoints(p1, p2, p3)
-		t2 := NewTriangleForPoints(p1, p3, p4)
+		t1 := NewTriangleForPoints(p1, p2, p3, i)
+		t2 := NewTriangleForPoints(p1, p3, p4, i+len(faces))
 		t1.V1.Color = plane.Color
 		t1.V2.Color = plane.Color
 		t1.V3.Color = plane.Color

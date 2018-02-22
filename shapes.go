@@ -8,8 +8,8 @@ func NewPlane() *Mesh {
 	v3 := Vector{0.5, 0.5, 0}
 	v4 := Vector{-0.5, 0.5, 0}
 	return NewTriangleMesh([]*Triangle{
-		NewTriangleForPoints(v1, v2, v3),
-		NewTriangleForPoints(v1, v3, v4),
+		NewTriangleForPoints(v1, v2, v3, 0),
+		NewTriangleForPoints(v1, v3, v4, 1),
 	})
 }
 
@@ -19,18 +19,18 @@ func NewCube() *Mesh {
 		{1, -1, -1}, {1, -1, 1}, {1, 1, -1}, {1, 1, 1},
 	}
 	mesh := NewTriangleMesh([]*Triangle{
-		NewTriangleForPoints(v[3], v[5], v[7]),
-		NewTriangleForPoints(v[5], v[3], v[1]),
-		NewTriangleForPoints(v[0], v[6], v[4]),
-		NewTriangleForPoints(v[6], v[0], v[2]),
-		NewTriangleForPoints(v[0], v[5], v[1]),
-		NewTriangleForPoints(v[5], v[0], v[4]),
-		NewTriangleForPoints(v[5], v[6], v[7]),
-		NewTriangleForPoints(v[6], v[5], v[4]),
-		NewTriangleForPoints(v[6], v[3], v[7]),
-		NewTriangleForPoints(v[3], v[6], v[2]),
-		NewTriangleForPoints(v[0], v[3], v[2]),
-		NewTriangleForPoints(v[3], v[0], v[1]),
+		NewTriangleForPoints(v[3], v[5], v[7], 0),
+		NewTriangleForPoints(v[5], v[3], v[1], 1),
+		NewTriangleForPoints(v[0], v[6], v[4], 2),
+		NewTriangleForPoints(v[6], v[0], v[2], 3),
+		NewTriangleForPoints(v[0], v[5], v[1], 4),
+		NewTriangleForPoints(v[5], v[0], v[4], 5),
+		NewTriangleForPoints(v[5], v[6], v[7], 6),
+		NewTriangleForPoints(v[6], v[5], v[4], 7),
+		NewTriangleForPoints(v[6], v[3], v[7], 8),
+		NewTriangleForPoints(v[3], v[6], v[2], 9),
+		NewTriangleForPoints(v[0], v[3], v[2], 10),
+		NewTriangleForPoints(v[3], v[0], v[1], 11),
 	})
 	mesh.Transform(Scale(Vector{0.5, 0.5, 0.5}))
 	return mesh
@@ -85,8 +85,8 @@ func NewLatLngSphere(latStep, lngStep int) *Mesh {
 			p01 := LatLngToXYZ(float64(lat0), float64(lng1))
 			p10 := LatLngToXYZ(float64(lat1), float64(lng0))
 			p11 := LatLngToXYZ(float64(lat1), float64(lng1))
-			t1 := NewTriangleForPoints(p00, p01, p11)
-			t2 := NewTriangleForPoints(p00, p11, p10)
+			t1 := NewTriangleForPoints(p00, p01, p11, lat0)
+			t2 := NewTriangleForPoints(p00, p11, p10, lng0)
 			if lat0 != -90 {
 				t1.V1.Texture = Vector{u0, v0, 0}
 				t1.V2.Texture = Vector{u1, v0, 0}
@@ -118,7 +118,7 @@ func NewSphere(detail int) *Mesh {
 
 func newSphereHelper(detail int, v1, v2, v3 Vector) []*Triangle {
 	if detail == 0 {
-		t := NewTriangleForPoints(v1, v2, v3)
+		t := NewTriangleForPoints(v1, v2, v3, 0)
 		return []*Triangle{t}
 	}
 	var triangles []*Triangle
@@ -146,15 +146,15 @@ func NewCylinder(step int, capped bool) *Mesh {
 		p10 := Vector{x1, y1, -0.5}
 		p11 := Vector{x1, y1, 0.5}
 		p01 := Vector{x0, y0, 0.5}
-		t1 := NewTriangleForPoints(p00, p10, p11)
-		t2 := NewTriangleForPoints(p00, p11, p01)
+		t1 := NewTriangleForPoints(p00, p10, p11, a0)
+		t2 := NewTriangleForPoints(p00, p11, p01, a0+360)
 		triangles = append(triangles, t1)
 		triangles = append(triangles, t2)
 		if capped {
 			p0 := Vector{0, 0, -0.5}
 			p1 := Vector{0, 0, 0.5}
-			t3 := NewTriangleForPoints(p0, p10, p00)
-			t4 := NewTriangleForPoints(p1, p01, p11)
+			t3 := NewTriangleForPoints(p0, p10, p00, a0)
+			t4 := NewTriangleForPoints(p1, p01, p11, a0+360)
 			triangles = append(triangles, t3)
 			triangles = append(triangles, t4)
 		}
@@ -175,11 +175,11 @@ func NewCone(step int, capped bool) *Mesh {
 		p00 := Vector{x0, y0, -0.5}
 		p10 := Vector{x1, y1, -0.5}
 		p1 := Vector{0, 0, 0.5}
-		t1 := NewTriangleForPoints(p00, p10, p1)
+		t1 := NewTriangleForPoints(p00, p10, p1, a0)
 		triangles = append(triangles, t1)
 		if capped {
 			p0 := Vector{0, 0, -0.5}
-			t2 := NewTriangleForPoints(p0, p10, p00)
+			t2 := NewTriangleForPoints(p0, p10, p00, a0)
 			triangles = append(triangles, t2)
 		}
 	}
@@ -230,7 +230,7 @@ func NewIcosahedron() *Mesh {
 		p1 := vertices[idx[0]]
 		p2 := vertices[idx[1]]
 		p3 := vertices[idx[2]]
-		triangles[i] = NewTriangleForPoints(p1, p2, p3)
+		triangles[i] = NewTriangleForPoints(p1, p2, p3, i)
 	}
 	return NewTriangleMesh(triangles)
 }
