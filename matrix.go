@@ -92,6 +92,15 @@ func Perspective(fovy, aspect, near, far float64) Matrix {
 	return Frustum(-xmax, xmax, -ymax, ymax, near, far)
 }
 
+func PerspectiveGL(fovy, aspect, near, far float64) Matrix {
+
+	// fovy = (fovy * math.Pi) / 180.0 // convert from degrees to radians
+	nmf, f := near-far, float64(1./math.Tan(float64(fovy)/2.0))
+
+	return Matrix{float64(f / aspect), 0, 0, 0, 0, float64(f), 0, 0, 0, 0, float64((near + far) / nmf), float64((2. * far * near) / nmf), 0, 0, -1, 0}
+
+}
+
 func LookAt(eye, center, up Vector) Matrix {
 	z := eye.Sub(center).Normalize()
 	x := up.Cross(z).Normalize()
@@ -166,6 +175,10 @@ func (m Matrix) Orthographic(l, r, b, t, n, f float64) Matrix {
 
 func (m Matrix) Perspective(fovy, aspect, near, far float64) Matrix {
 	return Perspective(fovy, aspect, near, far).Mul(m)
+}
+
+func (m Matrix) PerspectiveGL(fovy, aspect, near, far float64) Matrix {
+	return PerspectiveGL(fovy, aspect, near, far).Mul(m)
 }
 
 func (m Matrix) LookAt(eye, center, up Vector) Matrix {
