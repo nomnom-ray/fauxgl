@@ -78,7 +78,7 @@ func NewContext(width, height int) *Context {
 	dc.Wireframe = false
 	dc.FrontFace = FaceCCW
 	dc.Cull = CullBack
-	dc.LineWidth = 2
+	dc.LineWidth = 3
 	dc.DepthBias = 0
 	dc.screenMatrix = Screen(width, height)
 	dc.locks = make([]sync.Mutex, 256)
